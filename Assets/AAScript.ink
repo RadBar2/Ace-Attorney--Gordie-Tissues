@@ -24,5 +24,5 @@ In the midst of a flickering sunrise, a new day has brouht forth its fruits.
 
 # Speaker: Gordon
 '*yawn*' I live to see another day... Talk about lucky.
-Let's go crush that bar exam.
+Today is the day when I finally become a lawyer.
     -> END
