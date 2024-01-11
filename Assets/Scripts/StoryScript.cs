@@ -1,20 +1,33 @@
-/*using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using Ink.Runtime;
 using UnityEditor.IMGUI.Controls;
 using UnityEditor.VersionControl;
+using UnityEngine.UI;
 
 public class StoryScript : MonoBehaviour
 {
     public TextAsset inkFile;
+    public GameObject textBox;
+    public GameObject customButton;
+    public GameObject ChoicePanel;
+    public bool isTalking = false;
+
     static Story story;
+    Text nametag;
+    Text message;
+    List<string> tags;
     static Choice choiceSelected;
 
     // Start is called before the first frame update
     void Start()
     {
-        story = new Story(inkFile.text);
+        story = Story(inkFile.text);
+        nametag = textBox.transform.GetChild(0).GetComponent<Text>();
+        message = textBox.transform.GetChild(1).GetComponent<Text>();
+        tags = new List<string>();
+        choiceSelected = null;
     }
 
     // Update is called once per frame
@@ -24,8 +37,13 @@ public class StoryScript : MonoBehaviour
         {
             if(story.canContinue) 
             {
-                nametag.text = "Phoenix";
+                nametag.text = "Edgeworth";
                 AdvanceDialogue();
+
+                if(story.currentChoices.Count != 0) 
+                {
+                    StartCoroutine(ShowChoices());
+                }
             }
         }
 
@@ -33,6 +51,11 @@ public class StoryScript : MonoBehaviour
         {
             FinishDialogue();
         }
+    }
+
+    private void FinishDialogue()
+    {
+        Debug.Log("End of dialogue");
     }
 
     void AdvanceDialogue()
@@ -73,7 +96,49 @@ public class StoryScript : MonoBehaviour
             yield return null;
         }
 
-        CharacterScript tempSpeaker;
+        CharacterScript tempSpeaker = GameObject.FindObjectOfType<CharacterScript>();
+        if (tempSpeaker.isTalking) 
+        {
+            SetAnimation("idle");
+        }
+        yield return null;
+    }
+
+    IEnumerator ShowChoices() 
+    {
+        List<Ink.Runtime.Choice> choices = story.currentChoices;
+
+        for(int i = 0; i < choices.Count; i++) 
+        {
+            GameObject temp = Instantiate(customButton, ChoicePanel.transform);
+            temp.transform.GetChild(0).GetComponent<Text>().text = choices[i].text;
+            temp.AddComponent<Selectable>();
+            temp.GetComponent<Selectable>().element = choices[i];
+            temp.GetComponent<Button>().onClick.AddListener(() => { temp.GetComponent<Selectable>().Decide(); });
+
+        }
+
+        ChoicePanel.SetActive(true);
+
+        yield return new WaitUntil(() => { return choiceSelected != null; });
+
+        AdvanceFromDecision();
+    }
+
+    public static void SetDecision(object element)
+    {
+        choiceSelected = (Choice)element;
+        story.ChooseChoiceIndex(choiceSelected.index);
+    }
+
+    void AdvanceFromDecision()
+    {
+        ChoicePanel.SetActive(false);
+        for (int i = 0; i < ChoicePanel.transform.childCount; i++) 
+        {
+            Destroy(ChoicePanel.transform.GetChild(i).gameObject);
+        }
+        choiceSelected = null;
+        AdvanceDialogue();
     }
 }
-*/
