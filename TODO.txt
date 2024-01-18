@@ -1,0 +1,10 @@
+1. Typing text
+2. Sprites for characters
+3. Fix Buttons
+4. Create a courtroom 
+5. Create courtroom gameplay
+6. Continue the script
+7. Options
+8. Audio
+9. Colors
+10. Save

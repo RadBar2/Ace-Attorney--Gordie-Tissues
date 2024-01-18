@@ -10,9 +10,6 @@ public class Options : MonoBehaviour
     public Button btn;
     public GameObject options;
 
-    bool mouseOver = false;
-
-
     void Start()
     {
         if (btn == null) btn = GetComponent<Button>();
