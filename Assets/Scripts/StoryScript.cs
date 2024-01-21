@@ -1,145 +1,256 @@
-/*using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using Ink.Runtime;
-using UnityEditor.IMGUI.Controls;
-using UnityEditor.VersionControl;
+//using UnityEditor.IMGUI.Controls;
+//using UnityEditor.VersionControl;
 using UnityEngine.UI;
+//using Unity.PlasticSCM.Editor.WebApi;
+using TMPro;
+using System;
+using System.Reflection;
+using UnityEngine.EventSystems;
 
 public class StoryScript : MonoBehaviour
 {
-    public TextAsset inkFile;
-    public GameObject textBox;
-    public GameObject customButton;
-    public GameObject ChoicePanel;
-    public bool isTalking = false;
+    public Button continueButton;
 
-    static Story story;
-    Text nametag;
-    Text message;
-    List<string> tags;
-    static Choice choiceSelected;
+    [SerializeField] private GameObject dialoguePanel;
+    [SerializeField] private TextMeshProUGUI dialogueTextDisplay;
+    [SerializeField] private TextMeshProUGUI speaker;
+    [SerializeField] public GameObject[] choices;
+    private TextMeshProUGUI[] choicesText;
 
-    // Start is called before the first frame update
-    void Start()
+    [SerializeField] private TextAsset inkJSON;
+
+    private Story currentStory;
+    private int currentStoryIndex = 0;
+
+    private bool dialogueIsPlaying { get; set; }
+
+    private bool canContinueToNextLine = false;
+
+    private Coroutine typeLineCoroutine;
+
+    private static StoryScript instance;
+
+    public Image background;
+
+    public Sprite[] backgrounds;
+    public int backgroundIndex = 0;
+
+    public Image sprite;
+
+    public Sprite[] sprites;
+    public int spriteIndex = 0;
+
+    public AudioSource audioSource;
+    public AudioClip[] clips;
+    public int clipsIndex = 0;
+
+    private void Awake()
     {
-        story = Story(inkFile.text);
-        nametag = textBox.transform.GetChild(0).GetComponent<Text>();
-        message = textBox.transform.GetChild(1).GetComponent<Text>();
-        tags = new List<string>();
-        choiceSelected = null;
+        if (instance == null) instance = this;
     }
 
-    // Update is called once per frame
-    void Update()
+    public static StoryScript GetInstance()
     {
-        if (Input.GetKeyDown(KeyCode.Space))
+        return instance;
+    }
+
+    private void Start()
+    {
+        sprite.enabled = false;
+
+        if (continueButton == null) continueButton = GetComponent<Button>();
+        continueButton.onClick.AddListener(TaskOnClick);
+
+        EnterDialogueMode(inkJSON);
+
+        choicesText = new TextMeshProUGUI[choices.Length];
+        int index = 0;
+        foreach (GameObject choice in choices)
         {
-            if(story.canContinue) 
-            {
-                nametag.text = "Edgeworth";
-                AdvanceDialogue();
-
-                if(story.currentChoices.Count != 0) 
-                {
-                    StartCoroutine(ShowChoices());
-                }
-            }
+            choicesText[index] = choice.GetComponentInChildren<TextMeshProUGUI>();
+            index++;
         }
+    }
 
+    private void Update()
+    {
+        if (!dialogueIsPlaying)
+        {
+            return;
+        }
+        if (canContinueToNextLine && Input.GetKeyDown("space"))
+        {
+            switch (currentStoryIndex)
+            {
+                case 0:
+                    ChangeBackground.changeBackground(background, backgrounds, ++backgroundIndex);
+                    break;
+                case 3:
+                    ChangeBackground.changeBackground(background, backgrounds, ++backgroundIndex);
+                    break;
+                case 5:
+                    ChangeBackground.changeBackground(background, backgrounds, ++backgroundIndex);
+                    break;
+                case 9:
+                    ChangeBackground.changeBackground(background, backgrounds, ++backgroundIndex);
+                    audioSource.clip = null;
+                    audioSource.Play();
+                    break;
+                case 10:
+                    ChangeBackground.changeBackground(background, backgrounds, ++backgroundIndex);
+                    audioSource.clip = clips[1];
+                    audioSource.Play();
+                    break;
+            }
+            ContinueStory();
+        }
+    }
+
+    void TaskOnClick()
+    {
+        switch (currentStoryIndex)
+        {
+            case 0:
+                ChangeBackground.changeBackground(background, backgrounds, ++backgroundIndex);
+                break;
+            case 3:
+                ChangeBackground.changeBackground(background, backgrounds, ++backgroundIndex);
+                break;
+            case 5:
+                ChangeBackground.changeBackground(background, backgrounds, ++backgroundIndex);
+                break;
+            case 9:
+                ChangeBackground.changeBackground(background, backgrounds, ++backgroundIndex);
+                audioSource.clip = null;
+                audioSource.Play();
+                break;
+            case 10:
+                ChangeBackground.changeBackground(background, backgrounds, ++backgroundIndex);
+                audioSource.clip = clips[1];
+                audioSource.Play();
+                break;
+        }
+        ContinueStory();
+    }
+
+    public void EnterDialogueMode(TextAsset inkJSON)
+    {
+        currentStory = new Story(inkJSON.text);
+        dialogueTextDisplay.text = "";
+        dialogueIsPlaying = true;
+        dialoguePanel.SetActive(true);
+    }
+
+    private void ExitDialogueMode()
+    {
+        dialogueIsPlaying = false;
+        dialoguePanel.SetActive(false);
+        dialogueTextDisplay.text = "";
+    }
+
+    private void ContinueStory()
+    {
+        if (currentStory.canContinue)
+        {
+            if (typeLineCoroutine != null)
+            {
+                StopCoroutine(typeLineCoroutine);
+            }
+            typeLineCoroutine = StartCoroutine(TypeLine(currentStory.Continue()));
+
+            foreach (string tag in currentStory.currentTags)
+            {
+                speaker.text = tag;
+            }
+
+            ChangeSprite(sprite, sprites, speaker.text);
+
+            if (sprite.sprite.name == speaker.text) sprite.enabled = true;
+            else sprite.enabled = false;
+
+            currentStoryIndex++;
+
+            DisplayChoices();
+
+        }
         else
         {
-            FinishDialogue();
+            // StartCoroutine(ExitDialogueMode());
         }
     }
 
-    private void FinishDialogue()
+    private IEnumerator TypeLine(string line)
     {
-        Debug.Log("End of dialogue");
-    }
+        dialogueTextDisplay.text = "";
 
-    void AdvanceDialogue()
-    {
-        string currentSentence = story.Continue();
-        ParseTags();
-        StopAllCoroutines();
-        StartCoroutine(TypeSentence(currentSentence));
-    }
+        HideChoices();
 
-    void ParseTags()
-    {
-        tags = story.currentTags;
-        foreach (string t in tags)
+        foreach (char letter in line.ToCharArray())
         {
-            string prefix = t.Split(' ')[0];
-            string param = t.Split(" ")[1];
-
-            switch (prefix.ToLower())
+            if(Input.GetKeyDown(KeyCode.LeftControl))
             {
-                case "anim":
-                    SetAnimation(param);
-                    break;
-                case "color":
-                    SetTextColor(param);
-                    break;
+                dialogueTextDisplay.text = line;
+                break;
             }
+            dialogueTextDisplay.text += letter;
+            yield return new WaitForSeconds(0.04f);
+        }
+        DisplayChoices();
+
+        canContinueToNextLine = true;
+    }
+
+    private void HideChoices()
+    {
+        foreach (GameObject choiceButton in choices)
+        {
+            choiceButton.SetActive(false);
         }
     }
 
-    IEnumerator TypeSentence(string sentence)
+    private void DisplayChoices()
     {
-        message.text = "";
+        List<Choice> currentChoices = currentStory.currentChoices;
 
-        foreach (char letter in sentence.ToCharArray())
+        if (currentChoices.Count > choices.Length) return;
+
+        int index = 0;
+
+        foreach (Choice choice in currentChoices)
         {
-            message.text += letter;
-            yield return null;
+            choices[index].gameObject.SetActive(true);
+            choicesText[index].text = choice.text;
+            index++;
         }
 
-        CharacterScript tempSpeaker = GameObject.FindObjectOfType<CharacterScript>();
-        if (tempSpeaker.isTalking) 
+        /*for (int i = index; i < choices.Length; i++)
         {
-            SetAnimation("idle");
-        }
-        yield return null;
+            choices[i].gameObject.SetActive(false);
+        }*/
+
+        StartCoroutine(SelectFirstChoice());
     }
 
-    IEnumerator ShowChoices() 
+    private IEnumerator SelectFirstChoice()
     {
-        List<Ink.Runtime.Choice> choices = story.currentChoices;
-
-        for(int i = 0; i < choices.Count; i++) 
-        {
-            GameObject temp = Instantiate(customButton, ChoicePanel.transform);
-            temp.transform.GetChild(0).GetComponent<Text>().text = choices[i].text;
-            temp.AddComponent<Selectable>();
-            temp.GetComponent<Selectable>().element = choices[i];
-            temp.GetComponent<Button>().onClick.AddListener(() => { temp.GetComponent<Selectable>().Decide(); });
-
-        }
-
-        ChoicePanel.SetActive(true);
-
-        yield return new WaitUntil(() => { return choiceSelected != null; });
-
-        AdvanceFromDecision();
+        EventSystem.current.SetSelectedGameObject(null);
+        yield return new WaitForEndOfFrame();
+        EventSystem.current.SetSelectedGameObject(choices[0].gameObject);
     }
 
-    public static void SetDecision(object element)
+    public void MakeChoice(int choiceIndex)
     {
-        choiceSelected = (Choice)element;
-        story.ChooseChoiceIndex(choiceSelected.index);
+        currentStory.ChooseChoiceIndex(choiceIndex);
     }
 
-    void AdvanceFromDecision()
+    private void ChangeSprite(Image sprite, Sprite[] sprites, string name )
     {
-        ChoicePanel.SetActive(false);
-        for (int i = 0; i < ChoicePanel.transform.childCount; i++) 
-        {
-            Destroy(ChoicePanel.transform.GetChild(i).gameObject);
-        }
-        choiceSelected = null;
-        AdvanceDialogue();
+        foreach (Sprite sp in sprites)
+            if (sp.name == name) sprite.sprite = sp;
+            else return;
     }
 }
-*/
